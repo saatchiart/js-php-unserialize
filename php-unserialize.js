@@ -22,7 +22,7 @@ function error (type, msg, filename, line) {
   throw new window[type](msg, filename, line);
 }
 
-function read_until (data, offset, stopchr) {
+function readUntil (data, offset, stopchr) {
   var i = 2, buf = [], chr = data.slice(offset, offset + 1);
 
   while (chr != stopchr) {
@@ -36,7 +36,7 @@ function read_until (data, offset, stopchr) {
   return [buf.length, buf.join('')];
 }
 
-function read_chrs (data, offset, length) {
+function readChrs (data, offset, length) {
   var i, chr, buf;
 
   buf = [];
@@ -119,7 +119,7 @@ function _unserialize (data, offset) {
       typeconvert = function (x) {
         return parseInt(x, 10);
       };
-      readData = read_until(data, dataoffset, ';');
+      readData = readUntil(data, dataoffset, ';');
       chrs = readData[0];
       readdata = readData[1];
       dataoffset += chrs + 1;
@@ -128,7 +128,7 @@ function _unserialize (data, offset) {
       typeconvert = function (x) {
         return parseInt(x, 10) !== 0;
       };
-      readData = read_until(data, dataoffset, ';');
+      readData = readUntil(data, dataoffset, ';');
       chrs = readData[0];
       readdata = readData[1];
       dataoffset += chrs + 1;
@@ -137,7 +137,7 @@ function _unserialize (data, offset) {
       typeconvert = function (x) {
         return parseFloat(x);
       };
-      readData = read_until(data, dataoffset, ';');
+      readData = readUntil(data, dataoffset, ';');
       chrs = readData[0];
       readdata = readData[1];
       dataoffset += chrs + 1;
@@ -187,7 +187,7 @@ function getArray(data, offset) {
     , value;
   readdata = {};
 
-  keyandchrs = read_until(data, dataoffset, ':');
+  keyandchrs = readUntil(data, dataoffset, ':');
   chrs = keyandchrs[0];
   keys = keyandchrs[1];
   dataoffset += chrs + 2;
@@ -217,7 +217,7 @@ function getCount(data, offset) {
     , stringlength
     , readData
     , readdata;
-  ccount = read_until(data, offset, ':');
+  ccount = readUntil(data, offset, ':');
   chrs = ccount[0];
   count = ccount[1];
   offset += chrs + 2;
@@ -262,12 +262,12 @@ function getString(data, offset) {
     , stringlength
     , readData
     , readdata;
-  ccount = read_until(data, offset, ':');
+  ccount = readUntil(data, offset, ':');
   chrs = ccount[0];
   stringlength = ccount[1];
   offset += chrs + 2;
 
-  readData = read_chrs(data, offset + 1, parseInt(stringlength, 10));
+  readData = readChrs(data, offset + 1, parseInt(stringlength, 10));
   chrs = readData[0];
   readdata = readData[1];
   offset += chrs + 2;
