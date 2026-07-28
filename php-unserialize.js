@@ -4,6 +4,49 @@
 // Public API
 exports.unserialize = unserialize;
 exports.unserializeSession = unserializeSession;
+exports.unserializeAt = unserializeAt;
+
+// http://phpjs.org/functions/unserialize:571#comment_95906
+function utf8Overhead (chr) {
+  var code = chr.charCodeAt(0);
+  if (code < 0x0080) {
+    return 0;
+  }
+  if (code < 0x0800) {
+    return 1;
+  }
+  return 2;
+}
+
+function error (type, msg, filename, line) {
+  throw new window[type](msg, filename, line);
+}
+
+function readUntil (data, offset, stopchr) {
+  var i = 2, buf = [], chr = data.slice(offset, offset + 1);
+
+  while (chr != stopchr) {
+    if ((i + offset) > data.length) {
+      error('Error', 'Invalid');
+    }
+    buf.push(chr);
+    chr = data.slice(offset + (i - 1), offset + i);
+    i += 1;
+  }
+  return [buf.length, buf.join('')];
+}
+
+function readChrs (data, offset, length) {
+  var i, chr, buf;
+
+  buf = [];
+  for (i = 0; i < length; i++) {
+    chr = data.slice(offset + (i - 1), offset + i);
+    buf.push(chr);
+    length -= utf8Overhead(chr);
+  }
+  return [buf.length, buf.join('')];
+}
 
 /**
  * Unserialize data taken from PHP's serialize() output
@@ -38,119 +81,96 @@ function unserialize (data) {
   // *       returns 1: ['Kevin', 'van', 'Zonneveld']
   // *       example 2: unserialize('a:3:{s:9:"firstName";s:5:"Kevin";s:7:"midName";s:3:"van";s:7:"surName";s:9:"Zonneveld";}');
   // *       returns 2: {firstName: 'Kevin', midName: 'van', surName: 'Zonneveld'}
-  var that = this,
-    utf8Overhead = function (chr) {
-      // http://phpjs.org/functions/unserialize:571#comment_95906
-      var code = chr.charCodeAt(0);
-      if (code < 0x0080) {
-        return 0;
-      }
-      if (code < 0x0800) {
-        return 1;
-      }
-      return 2;
-    },
-    error = function (type, msg, filename, line) {
-      throw new window[type](msg, filename, line);
-    },
-    read_until = function (data, offset, stopchr) {
-      var i = 2, buf = [], chr = data.slice(offset, offset + 1);
+  return _unserialize((data + ''), 0)[2];
+}
 
-      while (chr != stopchr) {
-        if ((i + offset) > data.length) {
-          error('Error', 'Invalid');
-        }
-        buf.push(chr);
-        chr = data.slice(offset + (i - 1), offset + i);
-        i += 1;
-      }
-      return [buf.length, buf.join('')];
-    },
-    read_chrs = function (data, offset, length) {
-      var i, chr, buf;
+/**
+ * Parse a single PHP-serialized value starting at `offset` within a larger
+ * buffer, without assuming the buffer contains only that one value.
+ *
+ * @param string data   buffer containing (at least) one serialized value
+ * @param number offset index to start parsing at
+ * @return {value, length} the parsed value, and how many characters it consumed
+ * @throws
+ */
+function unserializeAt (data, offset) {
+  var result = _unserialize(data, offset || 0);
+  return { value: result[2], length: result[1] };
+}
 
-      buf = [];
-      for (i = 0; i < length; i++) {
-        chr = data.slice(offset + (i - 1), offset + i);
-        buf.push(chr);
-        length -= utf8Overhead(chr);
-      }
-      return [buf.length, buf.join('')];
-    },
-    _unserialize = function (data, offset) {
-      var dtype, dataoffset, keyandchrs, keys,
-        readdata, readData, ccount, stringlength,
-        i, key, kprops, kchrs, vprops, vchrs, value,
-        chrs = 0,
-        typeconvert = function (x) {
-          return x;
-        };
+function _unserialize (data, offset) {
+  var dtype, dataoffset, keyandchrs, keys,
+    readdata, readData, ccount, stringlength,
+    i, key, kprops, kchrs, vprops, vchrs, value,
+    chrs = 0,
+    typeconvert = function (x) {
+      return x;
+    };
 
-      if (!offset) {
-        offset = 0;
-      }
-      dtype = (data.slice(offset, offset + 1)).toLowerCase();
+  if (!offset) {
+    offset = 0;
+  }
+  dtype = (data.slice(offset, offset + 1)).toLowerCase();
 
-      dataoffset = offset + 2;
+  dataoffset = offset + 2;
 
-      switch (dtype) {
-        case 'i':
-          typeconvert = function (x) {
-            return parseInt(x, 10);
-          };
-          readData = read_until(data, dataoffset, ';');
-          chrs = readData[0];
-          readdata = readData[1];
-          dataoffset += chrs + 1;
-          break;
-        case 'b':
-          typeconvert = function (x) {
-            return parseInt(x, 10) !== 0;
-          };
-          readData = read_until(data, dataoffset, ';');
-          chrs = readData[0];
-          readdata = readData[1];
-          dataoffset += chrs + 1;
-          break;
-        case 'd':
-          typeconvert = function (x) {
-            return parseFloat(x);
-          };
-          readData = read_until(data, dataoffset, ';');
-          chrs = readData[0];
-          readdata = readData[1];
-          dataoffset += chrs + 1;
-          break;
-        case 'c':
-          var res = getClass(data, dataoffset);
-          dataoffset = res[0];
-          readdata = res[1];
-          break;
-        case 'o':
-          var res = getObject(data, dataoffset);
-          dataoffset = res[0];
-          readdata = res[1];
-          break;
-        case 'n':
-          readdata = null;
-          break;
-        case 's':
-          var res = getString(data, dataoffset);
-          dataoffset = res[0];
-          readdata = res[1];
-          break;
-        case 'a':
-          var res = getArray(data, dataoffset);
-          dataoffset = res[0];
-          readdata = res[1];
-          break;
-        default:
-          error('SyntaxError', 'Unknown / Unhandled data type(s): ' + dtype + ' :: ' + offset + JSON.stringify([dtype, data[offset], data.slice(offset-20, offset + 10), data]));
-          break;
-      }
-      return [dtype, dataoffset - offset, typeconvert(readdata)];
-    }
-  ;
+  switch (dtype) {
+    case 'i':
+      typeconvert = function (x) {
+        return parseInt(x, 10);
+      };
+      readData = readUntil(data, dataoffset, ';');
+      chrs = readData[0];
+      readdata = readData[1];
+      dataoffset += chrs + 1;
+      break;
+    case 'b':
+      typeconvert = function (x) {
+        return parseInt(x, 10) !== 0;
+      };
+      readData = readUntil(data, dataoffset, ';');
+      chrs = readData[0];
+      readdata = readData[1];
+      dataoffset += chrs + 1;
+      break;
+    case 'd':
+      typeconvert = function (x) {
+        return parseFloat(x);
+      };
+      readData = readUntil(data, dataoffset, ';');
+      chrs = readData[0];
+      readdata = readData[1];
+      dataoffset += chrs + 1;
+      break;
+    case 'c':
+      var res = getClass(data, dataoffset);
+      dataoffset = res[0];
+      readdata = res[1];
+      break;
+    case 'o':
+      var res = getObject(data, dataoffset);
+      dataoffset = res[0];
+      readdata = res[1];
+      break;
+    case 'n':
+      readdata = null;
+      break;
+    case 's':
+      var res = getString(data, dataoffset);
+      dataoffset = res[0];
+      readdata = res[1];
+      break;
+    case 'a':
+      var res = getArray(data, dataoffset);
+      dataoffset = res[0];
+      readdata = res[1];
+      break;
+    default:
+      error('SyntaxError', 'Unknown / Unhandled data type(s): ' + dtype + ' :: ' + offset + JSON.stringify([dtype, data[offset], data.slice(offset-20, offset + 10), data]));
+      break;
+  }
+  return [dtype, dataoffset - offset, typeconvert(readdata)];
+}
 
 function getArray(data, offset) {
   var readdata
@@ -167,7 +187,7 @@ function getArray(data, offset) {
     , value;
   readdata = {};
 
-  keyandchrs = read_until(data, dataoffset, ':');
+  keyandchrs = readUntil(data, dataoffset, ':');
   chrs = keyandchrs[0];
   keys = keyandchrs[1];
   dataoffset += chrs + 2;
@@ -197,7 +217,7 @@ function getCount(data, offset) {
     , stringlength
     , readData
     , readdata;
-  ccount = read_until(data, offset, ':');
+  ccount = readUntil(data, offset, ':');
   chrs = ccount[0];
   count = ccount[1];
   offset += chrs + 2;
@@ -242,12 +262,12 @@ function getString(data, offset) {
     , stringlength
     , readData
     , readdata;
-  ccount = read_until(data, offset, ':');
+  ccount = readUntil(data, offset, ':');
   chrs = ccount[0];
   stringlength = ccount[1];
   offset += chrs + 2;
 
-  readData = read_chrs(data, offset + 1, parseInt(stringlength, 10));
+  readData = readChrs(data, offset + 1, parseInt(stringlength, 10));
   chrs = readData[0];
   readdata = readData[1];
   offset += chrs + 2;
@@ -257,38 +277,42 @@ function getString(data, offset) {
   return [offset, readdata];
 };
 
-  return _unserialize((data + ''), 0)[2];
-}
 /**
- * Parse PHP-serialized session data
+ * Parse PHP-serialized session data: a sequence of NamespaceName|serializedValue
+ * pairs concatenated with no delimiter around the serialized values themselves.
+ *
+ * Namespace keys are always bare identifiers and never contain "|", but a
+ * serialized value legitimately can (e.g. a string field like an OAuth
+ * "provider|subject" id). So namespace boundaries are found by scanning for
+ * the next "|", while values are parsed with the real length-aware recursive
+ * parser and advanced by its reported consumed length — never by splitting
+ * the whole buffer on "|".
  *
  * @param string serialized session
  * @return unserialized data
  * @throws
  */
 function unserializeSession (input) {
-  return input.split(/\|/).reduce(function (output, part, index, parts) {
-    // First part = $key
-    if (index === 0) {
-      output._currKey = part;
+  var output = {};
+  var offset = 0;
+  // Trailing whitespace (e.g. a file's final newline) isn't part of any
+  // serialized value and would otherwise be mistaken for another namespace.
+  input = String(input).replace(/\s+$/, '');
+
+  while (offset < input.length) {
+    var pipeIndex = input.indexOf('|', offset);
+    if (pipeIndex === -1) {
+      throw new Error('Malformed session data: no namespace separator found at offset ' + offset);
     }
-    // Last part = $someSerializedStuff
-    else if (index === parts.length - 1) {
-      output[output._currKey] = unserialize(part);
-      delete output._currKey;
-    }
-    // Other output = $someSerializedStuff$key
-    else {
-      var match = part.match(/^((?:[\s\S]*?[;\}])+)([^;\}]+?)$/);
-      if (match) {
-        output[output._currKey] = unserialize(match[1]);
-        output._currKey = match[2];
-      } else {
-        throw new Error('Parse error on part "' + part + '"');
-      }
-    }
-    return output;
-  }, {});
+    var namespaceKey = input.slice(offset, pipeIndex);
+    offset = pipeIndex + 1;
+
+    var parsed = unserializeAt(input, offset);
+    output[namespaceKey] = parsed.value;
+    offset += parsed.length;
+  }
+
+  return output;
 }
 
 // /Wrapper

@@ -1,0 +1,15 @@
+{
+  "Zend_Auth": {
+    "storage": {
+      "name": "stdClass",
+      "body": {
+        "id": 999001,
+        "email": "qa.tester@example.com",
+        "first_name": "QA",
+        "last_name": "Tester",
+        "google_id": "google-oauth2|102193462347853696252",
+        "isEaselAdmin": false
+      }
+    }
+  }
+}
