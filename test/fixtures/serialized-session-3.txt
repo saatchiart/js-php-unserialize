@@ -1,0 +1,1 @@
+Zend_Auth|a:1:{s:7:"storage";O:8:"stdClass":6:{s:2:"id";i:999001;s:5:"email";s:21:"qa.tester@example.com";s:10:"first_name";s:2:"QA";s:9:"last_name";s:6:"Tester";s:9:"google_id";s:35:"google-oauth2|102193462347853696252";s:12:"isEaselAdmin";b:0;}}
